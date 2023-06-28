@@ -34,9 +34,57 @@ class EPSElementBuilder {
     return fields
   }
 
+  static inputWrapper(id){
+    const wrapper = document.createElement('div')
+    wrapper.id = id
+    wrapper.style.position = 'relative'
+
+    return wrapper
+  }
+
+  static inputField(id, { placeholder = '', value = '', onChange }) {
+    const input = document.createElement('input')
+    input.id = id
+    input.type = 'text'
+    input.placeholder = placeholder
+    input.value = value
+    input.style.flex = '1'
+    input.style.margin = '2px'
+    input.style.width = '160px'
+    input.style.borderRadius = 'var(--block-radius,8px)'
+    input.style.border = '1px solid rgba(0,0,0,0.1)'
+    input.addEventListener('input', (event) => { onChange(event.target.value) })
+    return input
+  }
+
+  static autocompleteList(id) {
+    const autocomplete = document.createElement('div')
+    autocomplete.id = id
+    autocomplete.style.width = '160px'
+    autocomplete.style.maxHeight = '100px'
+    autocomplete.style.overflowY = 'scroll'
+    autocomplete.style.position= 'absolute'
+    autocomplete.style.top= '44px'
+    autocomplete.style.left= '2px'
+    autocomplete.style.margin= '0'
+    autocomplete.style.padding= '0'
+    autocomplete.style.listStyle= 'none'
+    autocomplete.style.backgroundColor= '#fff'
+    autocomplete.style.border= '1px solid #ccc'
+    autocomplete.style.display= 'flex'
+    autocomplete.style.flexDirection= 'column'
+    autocomplete.style.justifyContent= 'flex-start'
+    autocomplete.style.paddingLeft= '10px'
+    autocomplete.style.borderRadius= 'var(--block-radius,8px)'
+    autocomplete.style.padding= '10px'
+
+    return autocomplete
+  }
+
+
   // Elements
   static openButton({ onClick }) {
-    const button = EPSElementBuilder.baseButton('🔯タグを選択', { size: 'sm', color: 'secondary' })
+    const button = EPSElementBuilder.baseButton('🔯提示词', { size: 'sm', color: 'secondary' })
     button.classList.add('easy_prompt_selector_button')
     button.addEventListener('click', onClick)
 
@@ -56,7 +104,7 @@ class EPSElementBuilder {
     const button = EPSElementBuilder.baseButton(title, { color })
     button.style.height = '2rem'
     button.style.flexGrow = '0'
-    button.style.margin = '2px'
+    button.style.margin = '2px 2px 8px 2px'
 
     button.addEventListener('click', onClick)
     button.addEventListener('contextmenu', onRightClick)
@@ -79,7 +127,7 @@ class EPSElementBuilder {
     select.style.margin = '2px'
     select.addEventListener('change', (event) => { onChange(event.target.value) })
 
-    const none = ['なし']
+    const none = ['空']
     none.concat(options).forEach((key) => {
       const option = document.createElement('option')
       option.value = key
@@ -118,6 +166,9 @@ class EasyPromptSelector {
   SELECT_ID = 'easy-prompt-selector-select'
   CONTENT_ID = 'easy-prompt-selector-content'
   TO_NEGATIVE_PROMPT_ID = 'easy-prompt-selector-to-negative-prompt'
+  AUTO_COMPLETE_LIST = []
+  CURRENT_KEY = ''
+  AUTO_COMPLETE_ID = 'auto-complete-list'
 
   constructor(yaml, gradioApp) {
     this.yaml = yaml
@@ -178,8 +229,14 @@ class EasyPromptSelector {
     dropDown.style.minWidth = '1'
     row.appendChild(dropDown)
 
+    const inputWrapper = this.renderInputWrapper()
+    inputWrapper.style.flex = '1'
+    inputWrapper.style.minWidth = '1'
+
+    row.appendChild(inputWrapper)
+
     const settings = document.createElement('div')
-    const checkbox = EPSElementBuilder.checkbox('ネガティブプロンプトに入力', {
+    const checkbox = EPSElementBuilder.checkbox('负面', {
       onChange: (checked) => { this.toNegative = checked }
     })
     settings.style.flex = '1'
@@ -195,6 +252,73 @@ class EasyPromptSelector {
     return container
   }
 
+  renderInputWrapper() {
+    const inputWrapper = EPSElementBuilder.inputWrapper('input-wrapper')
+    const inputField = this.renderInputField()
+
+    inputWrapper.appendChild(inputField)
+    return inputWrapper
+  }
+
+  renderInputField(){
+    const inputField = EPSElementBuilder.inputField('input-field', {
+      placeholder:'请输入提示词', value: null, onChange: e =>{
+        const inputWrapper = document.getElementById('input-wrapper')
+        if(!e){
+          debugger
+          const autoComplete = document.getElementById(this.AUTO_COMPLETE_ID)
+          if (autoComplete) {
+            autoComplete.innerHTML = ''
+            inputWrapper.removeChild(autoComplete)
+          } else {
+            console.log(autoComplete)
+          }
+          return this.AUTO_COMPLETE_LIST = []
+        }
+        // inputWrapper.appendChild(this.renderAutoComplete())
+        const content = gradioApp().getElementById(this.CONTENT_ID)
+        const data = this.tags[this.CURRENT_KEY]
+        Object.keys(data).forEach((key) => {
+          if (typeof data[key] === "object") {
+            Object.keys(data[key]).forEach((subKey) => {
+              if (subKey.includes(e)) {
+                const _obj = new Object()
+                _obj[subKey]= data[key][subKey]
+                this.AUTO_COMPLETE_LIST.push(_obj)
+              }
+            });
+          } else if (key.includes(e)) {
+            const _obj = new Object()
+            _obj[key]= data[key]
+            this.AUTO_COMPLETE_LIST.push(_obj)
+          }
+        });
+        const autoComplete = document.getElementById(this.AUTO_COMPLETE_ID) ?? this.renderAutoComplete()
+        inputWrapper.appendChild(autoComplete)
+        if(!this.AUTO_COMPLETE_LIST[0]) return;
+        this.AUTO_COMPLETE_LIST.map(item => {
+          const tagButton = this.renderTagButton(Object.keys(item)[0], item[Object.keys(item)[0]])
+          autoComplete.appendChild(tagButton)
+        })
+      }
+    })
+    return inputField
+  }
+
+
+
+  renderAutoComplete() {
+    const autoComplete = EPSElementBuilder.autocompleteList(this.AUTO_COMPLETE_ID)
+    // this.AUTO_COMPLETE_LIST.map(item => {
+    //   console.log(item)
+    //   const tagButton = this.renderTagButton(Object.keys(item)[0], item[Object.keys(item)[0]])
+    //   autoComplete.appendChild(tagButton)
+    // })
+
+
+    return autoComplete
+  }
+
   renderDropdown() {
     const dropDown = EPSElementBuilder.dropDown(
       this.SELECT_ID,
@@ -204,6 +328,7 @@ class EasyPromptSelector {
           Array.from(content.childNodes).forEach((node) => {
             const visible = node.id === `easy-prompt-selector-container-${selected}`
             this.changeVisibility(node, visible)
+            this.CURRENT_KEY = selected
           })
         }
       }
